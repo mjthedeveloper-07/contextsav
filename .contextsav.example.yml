@@ -1,0 +1,33 @@
+# .contextsav.yml — project-level config for contextsav
+# Copy this to .contextsav.yml and customize for your project.
+# CLI flags always override these settings.
+
+# Token budget (default: 4000)
+# maxTokens: 8000
+
+# Output format: plain (default), markdown, xml
+# format: xml
+
+# Always include these extra files regardless of git status
+# include:
+#   - README.md
+#   - Makefile
+#   - docker-compose.yml
+
+# Always exclude these paths (stacks on top of .gitignore)
+# exclude:
+#   - tests/fixtures/
+#   - "*.spec.ts"
+#   - migrations/
+
+# Scan all source files instead of only changed ones
+# all: false
+
+# Prepend git diff automatically
+# diff: false
+
+# Max file size in bytes — files larger than this are skipped (default: 204800 = 200 KB)
+# maxFileSize: 102400
+
+# Suppress the project/branch/date header
+# noHeader: false
