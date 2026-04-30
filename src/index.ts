@@ -198,7 +198,7 @@ const program = new Command();
 program
   .name('contextsav')
   .description('Save the perfect AI context from your project in one command')
-  .version('0.1.0')
+  .version('1.1.0')
   .option('-o, --output <file>', 'write context to a file instead of clipboard')
   .option('-t, --max-tokens <number>', 'token budget for output (default: 4000)')
   .option('-i, --include <patterns>', 'extra glob patterns to include (comma-separated)')
