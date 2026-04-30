@@ -1,0 +1,31 @@
+{
+  "name": "contextsav",
+  "version": "0.1.0",
+  "description": "Smart AI context saver for your terminal – auto-gathers relevant project files for perfect AI prompts.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "contextsav": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["ai", "context", "cli", "copilot", "developer-tools", "chatgpt", "claude"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mjthedeveloper-07/contextsav.git"
+  },
+  "author": "mjthedeveloper-07",
+  "license": "MIT",
+  "dependencies": {
+    "clipboardy": "^5.3.1",
+    "commander": "^14.0.3",
+    "fast-glob": "^3.3.3",
+    "ignore": "^7.0.5"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "typescript": "^6.0.3"
+  }
+}
