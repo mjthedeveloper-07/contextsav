@@ -1,4 +1,6 @@
 src/
 .vscode/
+.claude/
 tsconfig.json
 *.tgz
+.contextsav.example.yml
