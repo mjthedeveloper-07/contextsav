@@ -1,6 +1,6 @@
 {
   "name": "contextsav",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Smart AI context saver for your terminal – auto-gathers relevant project files for perfect AI prompts.",
   "type": "module",
   "main": "dist/index.js",
