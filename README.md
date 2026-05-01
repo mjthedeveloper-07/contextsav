@@ -1,8 +1,8 @@
 # contextsav
 
-> Zero-friction AI context from your terminal. No VS Code needed.
+> Zero-friction AI context from your terminal. One command. Perfect context every time.
 
-Instead of manually copying files into ChatGPT, Claude, or Copilot Chat, just run one command. `contextsav` finds the files you're working on, respects your `.gitignore`, fits everything inside your AI's token window, and copies it straight to your clipboard — ready to paste.
+Instead of manually copying files into ChatGPT, Claude, Copilot, or Gemini — run one command. `contextsav` finds what you're working on, respects `.gitignore`, fits inside the AI's token window, and copies it to your clipboard.
 
 ---
 
@@ -10,9 +10,12 @@ Instead of manually copying files into ChatGPT, Claude, or Copilot Chat, just ru
 
 - [Quick Start](#quick-start)
 - [Installation](#installation)
+- [Interactive Mode](#interactive-mode)
+- [AI Model Presets](#ai-model-presets)
 - [Usage](#usage)
 - [Options Reference](#options-reference)
 - [Step-by-Step Workflow](#step-by-step-workflow)
+- [Config File](#config-file)
 - [How It Works](#how-it-works)
 - [Supported Languages](#supported-languages)
 - [Contributing](#contributing)
@@ -22,47 +25,80 @@ Instead of manually copying files into ChatGPT, Claude, or Copilot Chat, just ru
 
 ## Quick Start
 
-No install needed. Just run in any project directory:
-
 ```bash
 npx contextsav
 ```
 
-Your AI-ready context is now on your clipboard. Paste it into ChatGPT, Claude, or any AI tool.
+Context is on your clipboard. Paste into any AI chat and ask your question.
 
 ---
 
 ## Installation
 
-### Option 1 — Run without installing (recommended for one-off use)
+### No install — run directly
 
 ```bash
 npx contextsav
 ```
 
-### Option 2 — Install globally via npm
+### Global install
 
 ```bash
 npm install -g contextsav
 ```
 
-After installing globally, use it anywhere:
-
-```bash
-contextsav
-```
-
-### Option 3 — Install globally via npx with a version pin
-
-```bash
-npx contextsav@0.1.0
-```
-
 ### Requirements
 
-- Node.js 18 or later
-- npm 7 or later
+- Node.js 18+
 - Git (optional — used to detect changed files)
+
+---
+
+## Interactive Mode
+
+The easiest way to use contextsav. It walks you through everything:
+
+```bash
+npx contextsav --interactive
+# or
+npx contextsav -I
+```
+
+It will ask you:
+
+1. **Which AI are you targeting?** — Claude, ChatGPT, Gemini, Copilot, Grok, Mistral, or custom
+2. **Token budget** — auto-filled based on the AI you picked
+3. **Output format** — plain, markdown, or XML
+4. **Scope** — changed files only, or all source files
+5. **Language filter** — TypeScript only, Python only, all, etc.
+6. **File picker** — checkbox list of every eligible file with "modified X ago" timestamps
+7. **Include git diff?** — prepend your recent changes
+8. **File tree summary?** — add a directory overview at the top
+9. **Output destination** — clipboard or save to a named file
+
+---
+
+## AI Model Presets
+
+Use `--model` to automatically configure the token budget and output format for your target AI:
+
+```bash
+contextsav --model claude       # 100k tokens, XML format  (best for Claude)
+contextsav --model chatgpt      # 32k tokens,  Markdown
+contextsav --model gemini       # 500k tokens, plain text
+contextsav --model copilot      # 8k tokens,   plain text
+contextsav --model grok         # 128k tokens, Markdown
+contextsav --model mistral      # 32k tokens,  plain text
+```
+
+| Model | Token Budget | Format |
+| --- | --- | --- |
+| `claude` | 100,000 | xml |
+| `chatgpt` | 32,000 | markdown |
+| `gemini` | 500,000 | plain |
+| `copilot` | 8,000 | plain |
+| `grok` | 128,000 | markdown |
+| `mistral` | 32,000 | plain |
 
 ---
 
@@ -74,15 +110,38 @@ npx contextsav@0.1.0
 contextsav
 ```
 
-Detects files from `git diff`, `git status`, and untracked files. Copies context to clipboard automatically.
+### Interactive guided mode
 
-### Include all source files (not just changed ones)
+```bash
+contextsav -I
+```
+
+### Target a specific AI
+
+```bash
+contextsav --model claude
+contextsav --model chatgpt
+```
+
+### Include all source files
 
 ```bash
 contextsav --all
 ```
 
-Scans every supported source file in the project, up to the token budget.
+### Filter by language
+
+```bash
+contextsav --lang ts      # TypeScript only
+contextsav --lang py      # Python only
+contextsav --lang go      # Go only
+```
+
+### Grab N most recently modified files
+
+```bash
+contextsav --recent 5
+```
 
 ### Include git diff at the top
 
@@ -90,15 +149,18 @@ Scans every supported source file in the project, up to the token budget.
 contextsav --diff
 ```
 
-Prepends the full `git diff` output before the file contents — useful when asking an AI to review your changes.
-
-### Save context to a file instead of clipboard
+### Add a file tree summary
 
 ```bash
-contextsav -o context.txt
+contextsav --summary
 ```
 
-Writes the output to `context.txt` in the current directory.
+### Save to a named file
+
+```bash
+contextsav -o my-context.txt
+contextsav -o feature-auth-context.txt
+```
 
 ### Set a custom token budget
 
@@ -106,44 +168,95 @@ Writes the output to `context.txt` in the current directory.
 contextsav -t 8000
 ```
 
-Default is `4000` tokens. Increase this for models with larger context windows (e.g. Claude, GPT-4o).
-
-### Include extra files by glob pattern
+### Output format
 
 ```bash
-contextsav -i "*.md,Makefile,docker-compose.yml"
+contextsav -f plain       # default — // filepath headers
+contextsav -f markdown    # fenced code blocks
+contextsav -f xml         # <context><file> tags (best for Claude)
 ```
 
-Appends matched files to the captured context.
-
-### Exclude specific paths or patterns
+### Preview without capturing
 
 ```bash
-contextsav -e "tests/,fixtures/,*.spec.ts"
+contextsav --dry-run
+contextsav --dry-run --all --model claude
 ```
 
-Excludes matching files from the output. Stacks on top of `.gitignore`.
+### Project statistics
+
+```bash
+contextsav --stats
+```
+
+Output:
+
+```text
+📊 Project stats for my-app
+
+  Total files : 42
+  Total lines : 8,312
+
+  By language :
+    .ts          28 files   5,204 lines
+    .py           9 files   2,100 lines
+    .go           5 files   1,008 lines
+```
+
+### View capture history
+
+```bash
+contextsav --history
+```
+
+Captures are saved to `~/.contextsav/history/` when you use `--save-history` or interactive mode.
+
+### Save a backup to history
+
+```bash
+contextsav --save-history
+contextsav -o ctx.txt --save-history
+```
+
+### JSON output for scripting
+
+```bash
+contextsav --json
+contextsav --json --all -o ctx.json
+```
 
 ### Combine options
 
 ```bash
-contextsav --all --diff -t 8000 -o full-context.txt
+contextsav --model claude --all --diff --summary -o context.xml
 ```
 
 ---
 
 ## Options Reference
 
-| Option | Short | Default | Description |
-| --- | --- | --- | --- |
-| `--all` | | off | Include all source files, not just changed ones |
-| `--diff` | | off | Prepend `git diff` output to context |
-| `--output <file>` | `-o` | clipboard | Write output to a file instead of clipboard |
-| `--max-tokens <n>` | `-t` | `4000` | Maximum token budget for the output |
-| `--include <globs>` | `-i` | — | Comma-separated glob patterns to always include |
-| `--exclude <globs>` | `-e` | — | Comma-separated glob patterns to exclude |
-| `--version` | `-V` | | Print version number |
-| `--help` | `-h` | | Show help |
+| Option | Short | Description |
+| --- | --- | --- |
+| `--interactive` | `-I` | Guided interactive mode |
+| `--stats` | | Show project file/line statistics |
+| `--history` | | List recent captures from history |
+| `--dry-run` | | Preview files without capturing |
+| `--output <file>` | `-o` | Save to a named file instead of clipboard |
+| `--save-history` | | Save a copy to `~/.contextsav/history/` |
+| `--all` | | Include all source files, not just changed |
+| `--recent <n>` | | Capture the N most recently modified files |
+| `--lang <ext>` | | Filter by language (ts, js, py, go, rs, etc.) |
+| `--include <globs>` | `-i` | Extra glob patterns to include |
+| `--exclude <globs>` | `-e` | Extra patterns to exclude |
+| `--format <type>` | `-f` | Output format: plain, markdown, xml |
+| `--model <ai>` | `-m` | AI preset: claude, chatgpt, gemini, copilot, grok, mistral |
+| `--max-tokens <n>` | `-t` | Override token budget |
+| `--diff` | | Prepend git diff |
+| `--summary` | | Prepend file tree summary |
+| `--json` | | Output as structured JSON |
+| `--no-header` | | Omit project/branch/date/model header |
+| `--version` | `-V` | Print version |
+| `--help` | `-h` | Show help |
 
 ---
 
@@ -155,80 +268,117 @@ contextsav --all --diff -t 8000 -o full-context.txt
 cd ~/projects/my-app
 ```
 
-### Step 2 — Make some changes (or stage files)
+### Step 2 — Run (choose one)
 
 ```bash
-# Edit some files, then optionally stage them
-git add src/auth.ts src/middleware.ts
+# Quickest — changed files to clipboard
+contextsav
+
+# Guided — recommended for first-timers
+contextsav -I
+
+# For Claude — best format automatically
+contextsav --model claude
 ```
 
-### Step 3 — Run contextsav
+### Step 3 — Paste into your AI tool
 
-```bash
-npx contextsav
-```
+`Cmd+V` on Mac, `Ctrl+V` on Windows/Linux.
 
-Output:
-
-```text
-✅ Context copied to clipboard — 3 files, ~1800 tokens
-```
-
-### Step 4 — Paste into your AI tool
-
-Open ChatGPT, Claude, or Copilot Chat and paste with `Cmd+V` / `Ctrl+V`.
-
-### Step 5 — Ask your question
-
-Add your prompt after the pasted context:
+### Step 4 — Add your question
 
 ```text
 [pasted context]
 
-Can you find the bug in the auth middleware and suggest a fix?
+Can you find the bug in the auth middleware?
 ```
 
 ---
 
-### Workflow: Debug a specific bug
+### Workflow: Debug a bug targeting Claude
 
 ```bash
-# Stage the files related to the bug
 git add src/api/users.ts src/db/queries.ts
-
-# Capture with diff to show what changed
-npx contextsav --diff
-
-# Paste into Claude and ask:
-# "Here are my recent changes and the files involved.
-#  I'm getting a 500 error on POST /users. What's wrong?"
+contextsav --model claude --diff
+# Paste → "I'm getting a 500 error on POST /users. What's wrong?"
 ```
 
-### Workflow: Ask AI to review your entire feature
+### Workflow: Review your whole feature
 
 ```bash
-# Capture all source files with a large token budget
-npx contextsav --all -t 10000 -o feature-context.txt
-
-# Then paste the file contents into your AI tool
+contextsav --all --model chatgpt --summary -o review.md
+# Paste contents → "Review this for bugs, security issues, and improvements."
 ```
 
-### Workflow: Save context for later
+### Workflow: Quick check — what would be captured?
 
 ```bash
-npx contextsav -o context-$(date +%Y%m%d).txt
-# Saves: context-20260430.txt
+contextsav --dry-run --model claude
 ```
+
+### Workflow: Save context by filename for a sprint
+
+```bash
+contextsav --all -o sprint-42-context.txt --save-history
+```
+
+---
+
+## Config File
+
+Create `.contextsav.yml` in your project root to set defaults. CLI flags always override it.
+
+```yaml
+# .contextsav.yml
+
+# Target AI preset
+model: claude
+
+# Token budget (overrides preset default)
+maxTokens: 50000
+
+# Output format: plain, markdown, xml
+format: xml
+
+# Always include these extra files
+include:
+  - README.md
+  - Makefile
+
+# Always exclude these paths
+exclude:
+  - tests/fixtures/
+  - "*.spec.ts"
+
+# Scan all files by default
+all: false
+
+# Always prepend git diff
+diff: false
+
+# Max file size in bytes (default: 204800 = 200 KB)
+maxFileSize: 102400
+
+# Skip the header line
+noHeader: false
+```
+
+You can also create `~/.contextsav.yml` as a global config that applies to all projects. Project config overrides global config.
 
 ---
 
 ## How It Works
 
-1. **Detects changed files** — runs `git diff --cached`, `git diff`, and `git ls-files --others` to find what you're working on
-2. **Falls back to full scan** — if nothing is changed (or you use `--all`), scans all source files
-3. **Respects `.gitignore`** — ignores the same files git ignores, plus `node_modules`, `dist`, `.git`, `build`, `.next`, `coverage`
-4. **Applies token budget** — estimates tokens (~4 chars per token) and stops adding files when the budget is reached
-5. **Outputs to clipboard or file** — copies directly or writes to a path you specify
+1. Detects changed files via `git diff --cached`, `git diff`, and `git ls-files --others`
+2. Falls back to all source files if nothing is staged, or when `--all` is used
+3. Respects `.gitignore` — ignores the same files git ignores
+4. Always excludes: `node_modules`, `dist`, `.git`, `build`, `.next`, `coverage`, `.env`
+5. Skips binary files (detects null bytes)
+6. Skips files over 200 KB
+7. Blocks path traversal — only reads files inside the project root
+8. Sorts by most recently modified — most relevant files captured first
+9. Stops adding files when the token budget is reached
+10. Outputs to clipboard or a named file
 
 ---
 
@@ -237,7 +387,7 @@ npx contextsav -o context-$(date +%Y%m%d).txt
 | Language | Extensions |
 | --- | --- |
 | TypeScript | `.ts`, `.tsx` |
-| JavaScript | `.js`, `.jsx` |
+| JavaScript | `.js`, `.jsx`, `.mjs`, `.cjs` |
 | Python | `.py` |
 | Go | `.go` |
 | Rust | `.rs` |
@@ -246,16 +396,18 @@ npx contextsav -o context-$(date +%Y%m%d).txt
 | C# | `.cs` |
 | PHP | `.php` |
 | Swift | `.swift` |
-| Kotlin | `.kt` |
+| Kotlin | `.kt`, `.kts` |
 | Vue | `.vue` |
 | Svelte | `.svelte` |
+| C/C++ | `.c`, `.cpp`, `.h`, `.hpp` |
 
 ---
 
 ## Contributing
 
-1. Fork the repo: [github.com/mjthedeveloper-07/contextsav](https://github.com/mjthedeveloper-07/contextsav)
-2. Clone your fork and install dependencies:
+1. Fork: [github.com/mjthedeveloper-07/contextsav](https://github.com/mjthedeveloper-07/contextsav)
+
+2. Clone and install:
 
 ```bash
 git clone https://github.com/your-username/contextsav.git
@@ -263,13 +415,14 @@ cd contextsav
 npm install
 ```
 
-3. Make your changes in `src/index.ts`
+3. Edit `src/index.ts`
 
 4. Build and test:
 
 ```bash
 npm run build
 node dist/index.js --help
+node dist/index.js --dry-run --all
 ```
 
 5. Open a pull request
