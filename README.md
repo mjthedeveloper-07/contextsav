@@ -2,7 +2,24 @@
 
 > Zero-friction AI context from your terminal. One command. Perfect context every time.
 
+[![npm version](https://img.shields.io/npm/v/contextsav.svg)](https://www.npmjs.com/package/contextsav)
+[![npm downloads](https://img.shields.io/npm/dm/contextsav.svg)](https://www.npmjs.com/package/contextsav)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js 18+](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org)
+
 Instead of manually copying files into ChatGPT, Claude, Copilot, or Gemini — run one command. `contextsav` finds what you're working on, respects `.gitignore`, fits inside the AI's token window, and copies it to your clipboard.
+
+---
+
+## Why contextsav?
+
+| Without contextsav | With contextsav |
+| --- | --- |
+| Open files manually, copy each one | `npx contextsav` — done |
+| Forget which files are relevant | Git-aware: captures exactly what you're editing |
+| Paste too much, hit token limit | Token budget enforced automatically |
+| Wrong format for the AI you're using | `--model claude` sets format + budget for you |
+| Lose context between sessions | `--save-history` keeps every capture |
 
 ---
 
@@ -18,6 +35,7 @@ Instead of manually copying files into ChatGPT, Claude, Copilot, or Gemini — r
 - [Config File](#config-file)
 - [How It Works](#how-it-works)
 - [Supported Languages](#supported-languages)
+- [Changelog](#changelog)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -400,6 +418,38 @@ You can also create `~/.contextsav.yml` as a global config that applies to all p
 | Vue | `.vue` |
 | Svelte | `.svelte` |
 | C/C++ | `.c`, `.cpp`, `.h`, `.hpp` |
+
+---
+
+## Changelog
+
+### v1.2.0
+
+- `-I / --interactive` — guided mode: pick AI, files, format, and output name interactively
+- `--model claude|chatgpt|gemini|copilot|grok|mistral` — auto-sets token budget and format per AI
+- `--recent <n>` — capture the N most recently modified files
+- `--lang <ext>` — filter by language (ts, py, go, etc.)
+- `--summary` — prepend a file tree overview to the context
+- `--stats` — show file and line count breakdown by language
+- `--history` — list past captures from `~/.contextsav/history/`
+- `--save-history` — save every capture with a timestamp
+- Named output files prompted in interactive mode or via `-o`
+- Files sorted by most recently modified first
+
+### v1.1.0
+
+- `--dry-run` — preview files and token estimates without capturing
+- `--json` — structured JSON output for scripting and tooling
+- `-f / --format plain|markdown|xml` — choose output format
+- `.contextsav.yml` per-project config and `~/.contextsav.yml` global config
+- `--no-header` — omit project/branch/date header
+- Security: path traversal guard, binary file detection, `.env` exclusion, YAML validation
+- `prompt.md` — paste templates for Claude, ChatGPT, Copilot
+- `LICENSE` file added
+
+### v0.1.0
+
+- Initial release — git-aware file capture, clipboard output, token budget, `.gitignore` support
 
 ---
 
