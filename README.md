@@ -20,6 +20,9 @@ Instead of manually copying files into ChatGPT, Claude, Copilot, or Gemini — r
 | Paste too much, hit token limit | Token budget enforced automatically |
 | Wrong format for the AI you're using | `--model claude` sets format + budget for you |
 | Lose context between sessions | `--save-history` keeps every capture |
+| Copy unrelated files by accident | `--since main` captures only what changed |
+| Miss files that import shared code | `--deps` auto-pulls in your imports |
+| Re-type the same flags every session | `profile save` stores your flag combos |
 
 ---
 
@@ -412,6 +415,50 @@ contextsav --dry-run --model claude
 contextsav --all -o sprint-42-context.txt --save-history
 ```
 
+### Workflow: Review a PR (files changed since main)
+
+```bash
+contextsav --since main --deps --model claude --summary
+# Paste → "Review this PR for bugs, edge cases, and missing tests."
+```
+
+`--deps` auto-pulls in any shared utilities those files import — the AI sees the full picture.
+
+### Workflow: Share context from specific commits
+
+```bash
+contextsav --since HEAD~3 --model chatgpt
+# Paste → "Here's what I changed in the last 3 commits. Anything look wrong?"
+```
+
+### Workflow: Pipe a custom file list
+
+```bash
+# Only changed test files
+git diff --name-only HEAD~1 | grep '\.test\.' | contextsav --stdin --model claude
+
+# Only the files you care about right now
+echo -e "src/auth.ts\nsrc/db.ts\nsrc/routes.ts" | contextsav --stdin
+```
+
+### Workflow: Save your go-to flags as a profile
+
+```bash
+# Save once
+contextsav profile save mydefault -m claude -f xml --lang ts --deps --summary
+
+# Use forever after
+contextsav --profile mydefault
+contextsav --profile mydefault --since main   # profile + extra flag
+```
+
+### Workflow: Large repo — truncate giant files to fit the budget
+
+```bash
+contextsav --all --model claude --truncate
+# Big files show head 80 + tail 30 lines instead of being dropped entirely
+```
+
 ---
 
 ## Config File
@@ -459,16 +506,31 @@ You can also create `~/.contextsav.yml` as a global config that applies to all p
 
 ## How It Works
 
-1. Detects changed files via `git diff --cached`, `git diff`, and `git ls-files --others`
-2. Falls back to all source files if nothing is staged, or when `--all` is used
-3. Respects `.gitignore` — ignores the same files git ignores
-4. Always excludes: `node_modules`, `dist`, `.git`, `build`, `.next`, `coverage`, `.env`
-5. Skips binary files (detects null bytes)
-6. Skips files over 200 KB
-7. Blocks path traversal — only reads files inside the project root
-8. Sorts by most recently modified — most relevant files captured first
-9. Stops adding files when the token budget is reached
-10. Outputs to clipboard or a named file
+**File selection** (in priority order):
+
+1. `--stdin` — reads the file list from stdin (pipe from `find`, `git diff`, etc.)
+2. `--since <ref>` — runs `git diff --name-only <ref>` to get files changed since a git ref
+3. Default — detects changed files via `git diff --cached`, `git diff`, and `git ls-files --others`
+4. `--all` — scans all source files when no changes are found or explicitly requested
+
+**Filtering:**
+
+1. Respects `.gitignore` — ignores the same files git ignores
+2. Always excludes: `node_modules`, `dist`, `.git`, `build`, `.next`, `coverage`, `.env`
+3. Skips binary files (detects null bytes) and files over 200 KB
+4. Blocks path traversal — only reads files inside the project root
+
+**Expansion and sorting:**
+
+1. `--deps` — parses relative `import`/`require`/`export` statements and adds imported files (up to 3 hops). Only resolves relative paths; path aliases like `@/lib/foo` are not followed.
+2. Sorts by most recently modified — most relevant files appear first
+
+**Output:**
+
+1. `--truncate` — optionally shows head 80 + tail 30 lines for large files instead of dropping them
+2. Stops adding files when the token budget is reached
+3. Formats output as plain, markdown, or XML
+4. Copies to clipboard or writes to a named file
 
 ---
 
