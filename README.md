@@ -23,6 +23,13 @@ Instead of manually copying files into ChatGPT, Claude, Copilot, or Gemini — r
 | Copy unrelated files by accident | `--since main` captures only what changed |
 | Miss files that import shared code | `--deps` auto-pulls in your imports |
 | Re-type the same flags every session | `profile save` stores your flag combos |
+| Forget package.json / tsconfig in context | `--env` auto-pulls config files |
+| Context floods with test boilerplate | `--ignore-tests` strips them out |
+| Can't find which file has the bug | `--search <term>` filters to relevant files |
+| AI misses recent commit context | `--git-log 5` prepends your last commits |
+| Need to ask a question with the context | `--prompt "what's wrong here?"` appends it |
+| Huge output breaks paste limit | `--split 3` writes 3 part files automatically |
+| Re-capture manually after every save | `--watch` re-captures on every file change |
 
 ---
 
@@ -36,6 +43,7 @@ Instead of manually copying files into ChatGPT, Claude, Copilot, or Gemini — r
 - [Named Profiles](#named-profiles)
 - [Options Reference](#options-reference)
 - [Step-by-Step Workflow](#step-by-step-workflow)
+- [Vibe Coding Workflows](#vibe-coding-workflows)
 - [Config File](#config-file)
 - [How It Works](#how-it-works)
 - [Supported Languages](#supported-languages)
@@ -333,11 +341,21 @@ Profiles are stored in `~/.contextsav/profiles/` as plain JSON files.
 | `--max-tokens <n>` | `-t` | Override token budget |
 | `--since <ref>` | | Files changed since a git ref (branch, tag, or SHA) |
 | `--deps` | | Auto-include relative imports of selected files |
+| `--env` | | Auto-include config files (package.json, Dockerfile, tsconfig, etc.) |
 | `--truncate` | | Smart-truncate large files: head 80 + tail 30 lines |
+| `--compact` | | Collapse 3+ consecutive blank lines to 1 |
 | `--stdin` | | Read newline-separated file paths from stdin |
 | `--profile <name>` | | Load a saved profile as defaults |
 | `--diff` | | Prepend git diff |
 | `--summary` | | Prepend file tree summary |
+| `--git-log <n>` | | Prepend the last N git commit messages |
+| `--prompt <text>` | | Append a question or instruction to the output |
+| `--prompt-file <path>` | | Append prompt loaded from a file |
+| `--search <term>` | | Keep only files whose content contains the term |
+| `--ignore-tests` | | Exclude test files (`*.test.*`, `*.spec.*`, `*_test.*`) |
+| `--only-tests` | | Include only test files |
+| `--watch` | | Re-capture automatically on every file change (500 ms debounce) |
+| `--split <n>` | | Split output into N part files (requires `-o`) |
 | `--json` | | Output as structured JSON |
 | `--no-header` | | Omit project/branch/date/model header |
 | `--version` | `-V` | Print version |
@@ -461,6 +479,82 @@ contextsav --all --model claude --truncate
 
 ---
 
+## Vibe Coding Workflows
+
+Built for developers who live in the terminal and iterate fast.
+
+### Auto-capture on every save — watch mode
+
+```bash
+contextsav --watch --model claude -o ctx.xml
+# Re-captures the context automatically every time you save a file
+```
+
+Pair with your AI chat window open — paste the updated `ctx.xml` whenever the AI needs a refresh.
+
+### Ask your question right inside the context
+
+```bash
+contextsav --model claude --prompt "Why is the auth middleware returning 401 on valid tokens?"
+contextsav --model claude --prompt-file my-question.txt
+```
+
+The prompt is appended at the end of the output — paste once, get an answer.
+
+### Include config files so the AI sees the full picture
+
+```bash
+contextsav --model claude --env
+# Adds package.json, tsconfig.json, Dockerfile, go.mod, etc. automatically
+```
+
+### Filter to only the files that matter
+
+```bash
+# Only files that reference a specific function
+contextsav --all --search "useAuthToken" --model claude
+
+# Skip the noise — production code only, no tests
+contextsav --all --ignore-tests --model claude
+
+# Only the tests — for a focused test review
+contextsav --all --only-tests --model claude
+```
+
+### Add recent commit history for full context
+
+```bash
+contextsav --since main --git-log 5 --model claude
+# Captures changed files AND your last 5 commit messages
+```
+
+### Split large outputs for paste-limited UIs
+
+```bash
+contextsav --all --model chatgpt --split 3 -o ctx.txt
+# Writes ctx-part1-of-3.txt, ctx-part2-of-3.txt, ctx-part3-of-3.txt
+```
+
+### Vibe coder profile — save your complete setup once
+
+```bash
+# Save your full vibe-coding workflow as a profile
+contextsav profile save vibe -m claude -f xml --deps --env --compact --git-log 5
+
+# Every session: one command
+contextsav --profile vibe
+contextsav --profile vibe --prompt "Review this for bugs and performance issues"
+```
+
+### Strip excess whitespace to save tokens
+
+```bash
+contextsav --all --compact --model claude
+# 3+ blank lines collapsed to 1 — cleaner output, more files fit in budget
+```
+
+---
+
 ## Config File
 
 Create `.contextsav.yml` in your project root to set defaults. CLI flags always override it.
@@ -556,6 +650,20 @@ You can also create `~/.contextsav.yml` as a global config that applies to all p
 ---
 
 ## Changelog
+
+### v1.4.0
+
+- `--watch` — re-capture context automatically on every file save (500 ms debounce, no extra dependencies)
+- `--prompt <text>` — append a question or instruction directly to the captured output
+- `--prompt-file <path>` — load the prompt from a file (great for reusable question templates)
+- `--env` — auto-include project config files: `package.json`, `tsconfig.json`, `Dockerfile`, `go.mod`, `Cargo.toml`, `Makefile`, and more
+- `--ignore-tests` — strip test files (`*.test.*`, `*.spec.*`, `*_test.*`) from the output
+- `--only-tests` — include only test files (focused test review)
+- `--compact` — collapse 3+ consecutive blank lines to a single blank line (saves tokens)
+- `--git-log <n>` — prepend the last N git commit messages to give the AI recent history
+- `--search <term>` — keep only files whose content contains the search term
+- `--split <n>` — split large output into N part files (requires `-o`)
+- Internal refactor: logic split into `src/lib/capture.ts`, `src/lib/constants.ts`, `src/lib/transform.ts`, `src/lib/types.ts`
 
 ### v1.3.0
 
