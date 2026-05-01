@@ -30,6 +30,7 @@ Instead of manually copying files into ChatGPT, Claude, Copilot, or Gemini — r
 - [Interactive Mode](#interactive-mode)
 - [AI Model Presets](#ai-model-presets)
 - [Usage](#usage)
+- [Named Profiles](#named-profiles)
 - [Options Reference](#options-reference)
 - [Step-by-Step Workflow](#step-by-step-workflow)
 - [Config File](#config-file)
@@ -243,11 +244,69 @@ contextsav --json
 contextsav --json --all -o ctx.json
 ```
 
+### Files changed since a git ref
+
+```bash
+contextsav --since main          # files changed since main
+contextsav --since HEAD~5        # files changed in the last 5 commits
+contextsav --since v1.0.0        # files changed since a tag
+```
+
+### Auto-include imported files
+
+```bash
+contextsav --deps                # pull in relative imports of selected files
+contextsav --deps --since HEAD~3 # changed files + everything they import
+```
+
+> **Note:** `--deps` only resolves relative imports (e.g. `import x from './utils'`). TypeScript path aliases (`@/lib/foo`) are not followed.
+
+### Truncate large files
+
+```bash
+contextsav --truncate            # show head 80 + tail 30 lines for large files
+```
+
+### Read file list from stdin
+
+```bash
+git diff --name-only HEAD~1 | contextsav --stdin
+find src -name "*.ts" | contextsav --stdin --dry-run
+```
+
 ### Combine options
 
 ```bash
 contextsav --model claude --all --diff --summary -o context.xml
+contextsav --since main --deps --truncate --model claude
 ```
+
+---
+
+## Named Profiles
+
+Save frequently used flag combinations as named profiles so you don't type them every time.
+
+```bash
+# Save a profile
+contextsav profile save claude-ts -m claude -f xml --lang ts --deps
+
+# Use it
+contextsav --profile claude-ts
+
+# CLI flags override the profile
+contextsav --profile claude-ts --since main
+
+# List all saved profiles
+contextsav profile list
+
+# Delete a profile
+contextsav profile delete claude-ts
+```
+
+Profiles are stored in `~/.contextsav/profiles/` as plain JSON files.
+
+**Priority order** (highest wins): CLI flag > profile > config file > preset default.
 
 ---
 
@@ -269,12 +328,25 @@ contextsav --model claude --all --diff --summary -o context.xml
 | `--format <type>` | `-f` | Output format: plain, markdown, xml |
 | `--model <ai>` | `-m` | AI preset: claude, chatgpt, gemini, copilot, grok, mistral |
 | `--max-tokens <n>` | `-t` | Override token budget |
+| `--since <ref>` | | Files changed since a git ref (branch, tag, or SHA) |
+| `--deps` | | Auto-include relative imports of selected files |
+| `--truncate` | | Smart-truncate large files: head 80 + tail 30 lines |
+| `--stdin` | | Read newline-separated file paths from stdin |
+| `--profile <name>` | | Load a saved profile as defaults |
 | `--diff` | | Prepend git diff |
 | `--summary` | | Prepend file tree summary |
 | `--json` | | Output as structured JSON |
 | `--no-header` | | Omit project/branch/date/model header |
 | `--version` | `-V` | Print version |
 | `--help` | `-h` | Show help |
+
+### Profile subcommand
+
+| Command | Description |
+| --- | --- |
+| `contextsav profile save <name> [flags]` | Save flags as a named profile |
+| `contextsav profile list` | List all saved profiles |
+| `contextsav profile delete <name>` | Delete a saved profile |
 
 ---
 
@@ -422,6 +494,15 @@ You can also create `~/.contextsav.yml` as a global config that applies to all p
 ---
 
 ## Changelog
+
+### v1.3.0
+
+- `--since <ref>` — capture only files changed since a git branch, tag, or SHA
+- `--deps` — auto-expand selected files to include their relative imports (up to 3 hops)
+- `--truncate` — opt-in smart truncation: head 80 + tail 30 lines for large files
+- `--stdin` — read file paths from stdin (e.g. pipe from `find` or `git diff`)
+- `--profile <name>` — load saved flag presets; `profile save/list/delete` subcommands
+- Priority chain: CLI flag > profile > config file > AI preset default
 
 ### v1.2.0
 

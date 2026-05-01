@@ -5,10 +5,11 @@ import ignore from 'ignore';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 import clipboard from 'clipboardy';
 import { load as parseYaml } from 'js-yaml';
 import { checkbox, input, confirm, select } from '@inquirer/prompts';
+import { collectDeps } from './lib/deps.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -19,6 +20,7 @@ const ALWAYS_EXCLUDE = [
 const CONFIG_FILE = '.contextsav.yml';
 const GLOBAL_CONFIG = path.join(os.homedir(), '.contextsav.yml');
 const HISTORY_DIR = path.join(os.homedir(), '.contextsav', 'history');
+const PROFILES_DIR = path.join(os.homedir(), '.contextsav', 'profiles');
 const MAX_FILE_BYTES = 200 * 1024;
 
 // Language → glob extension mapping
@@ -45,6 +47,20 @@ const AI_PRESETS: Record<string, { maxTokens: number; format: OutputFormat; labe
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type OutputFormat = 'plain' | 'markdown' | 'xml';
+
+interface Profile {
+  model?: string;
+  format?: OutputFormat;
+  maxTokens?: number;
+  lang?: string;
+  all?: boolean;
+  diff?: boolean;
+  include?: string;
+  exclude?: string;
+  summary?: boolean;
+  deps?: boolean;
+  truncate?: boolean;
+}
 
 interface Config {
   maxTokens?: number;
@@ -245,6 +261,76 @@ function listHistory(): void {
   console.log(`\nStored in: ${HISTORY_DIR}`);
 }
 
+// ── Profiles ─────────────────────────────────────────────────────────────────
+
+function saveProfile(name: string, opts: Profile): void {
+  fs.mkdirSync(PROFILES_DIR, { recursive: true });
+  const file = path.join(PROFILES_DIR, `${name}.json`);
+  fs.writeFileSync(file, JSON.stringify(opts, null, 2), 'utf-8');
+  console.log(`✅ Profile '${name}' saved.`);
+}
+
+function loadProfile(name: string): Profile {
+  const file = path.join(PROFILES_DIR, `${name}.json`);
+  if (!fs.existsSync(file)) { console.error(`Profile '${name}' not found.`); process.exit(1); }
+  try { return JSON.parse(fs.readFileSync(file, 'utf-8')) as Profile; }
+  catch { console.error(`Profile '${name}' is corrupted.`); process.exit(1); }
+}
+
+function listProfiles(): void {
+  if (!fs.existsSync(PROFILES_DIR)) { console.log('No profiles saved yet.'); return; }
+  const files = fs.readdirSync(PROFILES_DIR).filter(f => f.endsWith('.json')).sort();
+  if (!files.length) { console.log('No profiles saved yet.'); return; }
+  console.log('\nSaved profiles:\n');
+  for (const f of files) {
+    const name = f.replace(/\.json$/, '');
+    try {
+      const p = JSON.parse(fs.readFileSync(path.join(PROFILES_DIR, f), 'utf-8')) as Profile;
+      const tags = [p.model, p.format, p.lang, p.all ? '--all' : ''].filter(Boolean).join(', ');
+      console.log(`  ${name.padEnd(20)} ${tags}`);
+    } catch { console.log(`  ${name}  (corrupted)`); }
+  }
+  console.log('');
+}
+
+function deleteProfile(name: string): void {
+  const file = path.join(PROFILES_DIR, `${name}.json`);
+  if (!fs.existsSync(file)) { console.error(`Profile '${name}' not found.`); process.exit(1); }
+  fs.unlinkSync(file);
+  console.log(`🗑  Profile '${name}' deleted.`);
+}
+
+// ── Git since helper ──────────────────────────────────────────────────────────
+
+function getChangedFilesSince(root: string, ref: string): string[] {
+  try {
+    const out = execFileSync('git', ['diff', '--name-only', ref], {
+      encoding: 'utf-8', cwd: root, stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+    return out.split('\n').filter(Boolean).map(f => path.resolve(root, f));
+  } catch {
+    console.warn(`⚠️  git diff --name-only ${ref} failed — ignoring --since.`);
+    return [];
+  }
+}
+
+// ── Truncation ────────────────────────────────────────────────────────────────
+
+function smartTruncate(content: string, filePath: string): string {
+  const lines = content.split('\n');
+  const HEAD = 80;
+  const TAIL = 30;
+  if (lines.length <= HEAD + TAIL) return content;
+  const omitted = lines.length - HEAD - TAIL;
+  const ext = path.extname(filePath);
+  const comment = ['.py', '.rb', '.sh', '.yaml', '.yml'].includes(ext) ? '#' : '//';
+  return [
+    ...lines.slice(0, HEAD),
+    `${comment} … ${omitted} lines omitted (use --truncate=false to disable) …`,
+    ...lines.slice(-TAIL),
+  ].join('\n');
+}
+
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
 async function showStats(root: string): Promise<void> {
@@ -285,10 +371,16 @@ async function collectCandidates(
   includePatterns: string[],
   ig: ReturnType<typeof ignore>,
   maxFileBytes: number,
+  sinceRef?: string,
+  stdinFiles?: string[],
 ): Promise<string[]> {
   let candidates: string[] = [];
 
-  if (!scanAll) {
+  if (sinceRef) {
+    candidates = getChangedFilesSince(root, sinceRef);
+  } else if (stdinFiles && stdinFiles.length) {
+    candidates = stdinFiles.map(f => path.resolve(root, f));
+  } else if (!scanAll) {
     try { candidates = getChangedFiles(root); }
     catch { scanAll = true; console.warn('⚠️  Not a git repo — scanning all source files.'); }
   }
@@ -457,10 +549,58 @@ async function runInteractive(root: string): Promise<void> {
 
 const program = new Command();
 
+// ── Profile subcommand ────────────────────────────────────────────────────────
+
+const profileCmd = program
+  .command('profile')
+  .description('manage named flag profiles');
+
+profileCmd
+  .command('save <name>')
+  .description('save current flags as a named profile')
+  .option('-m, --model <ai>', 'AI preset')
+  .option('-f, --format <type>', 'output format')
+  .option('-t, --max-tokens <number>', 'token budget')
+  .option('--lang <ext>', 'language filter')
+  .option('--all', 'include all files')
+  .option('--diff', 'prepend git diff')
+  .option('--summary', 'include file tree')
+  .option('--deps', 'expand dependency graph')
+  .option('--truncate', 'truncate large files')
+  .option('-i, --include <patterns>', 'extra include patterns')
+  .option('-e, --exclude <patterns>', 'extra exclude patterns')
+  .action((name: string, opts) => {
+    const p: Profile = {};
+    if (opts.model)     p.model     = opts.model as OutputFormat;
+    if (opts.format)    p.format    = opts.format as OutputFormat;
+    if (opts.maxTokens) p.maxTokens = parseInt(opts.maxTokens as string, 10);
+    if (opts.lang)      p.lang      = opts.lang as string;
+    if (opts.all)       p.all       = true;
+    if (opts.diff)      p.diff      = true;
+    if (opts.summary)   p.summary   = true;
+    if (opts.deps)      p.deps      = true;
+    if (opts.truncate)  p.truncate  = true;
+    if (opts.include)   p.include   = opts.include as string;
+    if (opts.exclude)   p.exclude   = opts.exclude as string;
+    saveProfile(name, p);
+  });
+
+profileCmd
+  .command('list')
+  .description('list all saved profiles')
+  .action(() => listProfiles());
+
+profileCmd
+  .command('delete <name>')
+  .description('delete a saved profile')
+  .action((name: string) => deleteProfile(name));
+
+// ── Main command ──────────────────────────────────────────────────────────────
+
 program
   .name('contextsav')
   .description('Save the perfect AI context from your project in one command')
-  .version('1.2.0')
+  .version('1.3.0')
   // Mode flags
   .option('-I, --interactive', 'guided interactive mode — pick files, AI target, output name')
   .option('--stats', 'show project file/line statistics and exit')
@@ -475,6 +615,7 @@ program
   .option('--lang <ext>', 'filter by language: ts, js, py, go, rs, rb, java, cs, php, swift, kt, cpp, all')
   .option('-i, --include <patterns>', 'extra glob patterns to include (comma-separated)')
   .option('-e, --exclude <patterns>', 'extra patterns to exclude (comma-separated)')
+  .option('--since <ref>', 'include files changed since a git ref (branch, tag, or SHA)')
   // Format
   .option('-f, --format <type>', 'output format: plain (default), markdown, xml')
   .option('-m, --model <ai>', 'AI preset: claude, chatgpt, gemini, copilot, grok, mistral (sets tokens+format)')
@@ -484,6 +625,10 @@ program
   .option('--summary', 'prepend a file tree summary')
   .option('--json', 'output as structured JSON')
   .option('--no-header', 'omit the project/branch/date/model header')
+  .option('--deps', 'auto-include files imported by the selected files (relative imports only)')
+  .option('--truncate', 'smart-truncate large files: head 80 + tail 30 lines')
+  .option('--stdin', 'read newline-separated file paths from stdin')
+  .option('--profile <name>', 'load a saved profile as defaults (CLI flags override profile)')
   .action(async options => {
     const root = process.cwd();
 
@@ -492,34 +637,67 @@ program
     if (options.stats)   { await showStats(root); return; }
     if (options.interactive) { await runInteractive(root); return; }
 
+    // Load profile defaults (CLI flags win)
+    const profile: Profile = options.profile ? loadProfile(options.profile as string) : {};
+
     const config = loadConfig(root);
-    const modelKey = (options.model as string) || config.model || 'custom';
+    const modelKey = (options.model as string) || profile.model || config.model || 'custom';
     const preset = AI_PRESETS[modelKey] ?? AI_PRESETS['custom']!;
 
     const maxTokens = options.maxTokens
       ? parseInt(options.maxTokens as string, 10)
-      : config.maxTokens ?? preset.maxTokens;
+      : profile.maxTokens ?? config.maxTokens ?? preset.maxTokens;
 
     const maxFileBytes = config.maxFileSize ?? MAX_FILE_BYTES;
-    const useAll  = (options.all as boolean)  || config.all  || false;
-    const useDiff = (options.diff as boolean) || config.diff || false;
-    const withSummary = options.summary as boolean || false;
+    const useAll    = (options.all as boolean)      || profile.all     || config.all  || false;
+    const useDiff   = (options.diff as boolean)     || profile.diff    || config.diff || false;
+    const withSummary = (options.summary as boolean) || profile.summary || false;
+    const useDeps   = (options.deps as boolean)     || profile.deps    || false;
+    const useTrunc  = (options.truncate as boolean) || profile.truncate || false;
     const showHeader = !(options.noHeader as boolean) && !config.noHeader;
+    const sinceRef  = options.since as string | undefined;
 
     const format: OutputFormat = (['plain', 'markdown', 'xml'].includes(options.format as string)
       ? options.format
-      : config.format ?? preset.format) as OutputFormat;
+      : profile.format ?? config.format ?? preset.format) as OutputFormat;
 
-    const langKey = (options.lang as string) || config.lang || 'all';
+    const langKey = (options.lang as string) || profile.lang || config.lang || 'all';
     const langGlob = LANG_MAP[langKey] ?? LANG_MAP['all']!;
 
     const ig = loadGitignore(root);
-    const excludePatterns = [...toArray(options.exclude as string), ...toArray(config.exclude)];
+    const excludePatterns = [
+      ...toArray(options.exclude as string),
+      ...toArray(profile.exclude),
+      ...toArray(config.exclude),
+    ];
     if (excludePatterns.length) ig.add(excludePatterns);
 
-    const includePatterns = [...toArray(options.include as string), ...toArray(config.include)];
+    const includePatterns = [
+      ...toArray(options.include as string),
+      ...toArray(profile.include),
+      ...toArray(config.include),
+    ];
 
-    let files = await collectCandidates(root, useAll, langGlob, includePatterns, ig, maxFileBytes);
+    // --stdin: read file paths from stdin
+    let stdinFiles: string[] | undefined;
+    if (options.stdin) {
+      const raw = fs.readFileSync('/dev/stdin', 'utf-8');
+      stdinFiles = raw.split('\n').map(l => l.trim()).filter(Boolean);
+    }
+
+    let files = await collectCandidates(root, useAll, langGlob, includePatterns, ig, maxFileBytes, sinceRef, stdinFiles);
+
+    // --deps: expand selected files to include their relative imports
+    if (useDeps && files.length) {
+      files = collectDeps(files, root, ig);
+      files = files.filter(f => {
+        if (!isWithinRoot(f, root)) return false;
+        try {
+          const stat = fs.statSync(f);
+          return stat.isFile() && stat.size <= maxFileBytes;
+        } catch { return false; }
+      });
+    }
 
     // --recent <n>: keep only the N most recently modified
     if (options.recent) {
@@ -539,7 +717,8 @@ program
       for (const f of files) {
         try {
           const rel = path.relative(root, f);
-          const content = fs.readFileSync(f, 'utf-8');
+          const raw = fs.readFileSync(f, 'utf-8');
+          const content = useTrunc ? smartTruncate(raw, rel) : raw;
           const t = estimateTokens(`// ${rel}\n${content}\n\n`);
           const stat = fs.statSync(f);
           const fits = budget - t >= 0 ? '✓' : '✗ over budget';
@@ -570,7 +749,8 @@ program
     for (const file of files) {
       try {
         const rel = path.relative(root, file);
-        const content = fs.readFileSync(file, 'utf-8');
+        const raw = fs.readFileSync(file, 'utf-8');
+        const content = useTrunc ? smartTruncate(raw, rel) : raw;
         const stat = fs.statSync(file);
         const t = estimateTokens(`// ${rel}\n${content}\n\n`);
         if (tokens + t > maxTokens) { truncated = true; break; }
